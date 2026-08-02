@@ -3507,7 +3507,7 @@ async function renderParametres() {
         <div style="width:40px;height:40px;border-radius:50%;background:var(--red-bg);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">🗑️</div>
         <div>
           <div class="card-title" style="color:var(--red);margin-bottom:2px">Zone de réinitialisation — Nouvel examen</div>
-          <div style="font-size:12px;color:var(--text2)">Réservé à l'administrateur · Action irréversible</div>
+          <div style="font-size:12px;color:var(--text2)">Réservé à l'Administrateur et au Directeur Régional · Action irréversible</div>
         </div>
       </div>
 
