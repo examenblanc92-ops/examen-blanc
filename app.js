@@ -9,10 +9,10 @@ import {
   addCentre, updateCentre, deleteCentre, upsertCentres,
   getMatieresBepc, getMatieresBac, addMatiereBepc,
   getCandidatsBepc, addCandidatBepc, updateCandidatBepc,
-  deleteCandidatBepc, validerBepc, deverrouillerBepc,
+  deleteCandidatBepc, validerBepc, deverrouillerBepc, validerBepcBulk,
   upsertCandidatsBepc, getNotesBepc, upsertNoteBepc, importNotesBepc,
   getCandidatsBac, addCandidatBac, updateCandidatBac,
-  deleteCandidatBac, validerBac, deverrouillerBac,
+  deleteCandidatBac, validerBac, deverrouillerBac, validerBacBulk,
   upsertCandidatsBac, getNotesBac, upsertNoteBac, importNotesBac,
   uploadPhoto, getProfiles, updateProfile
 } from './supabase.js';
@@ -1317,7 +1317,10 @@ async function renderSaisieBepc() {
       </div>
     </div>
     <div id="sbStats" style="display:none" class="saisie-header">
-      <strong id="sbCentreNom"></strong>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+        <strong id="sbCentreNom"></strong>
+        <button class="btn btn-success btn-sm" onclick="validerGroupeBepc(document.getElementById('sbCentre').value)">✓✓ Valider groupé</button>
+      </div>
       <div class="saisie-stats">
         <div><div class="saisie-stat-val" id="sbTotal">0</div><div class="saisie-stat-lbl">Total</div></div>
         <div><div class="saisie-stat-val" id="sbFilles" style="color:var(--purple)">0</div><div class="saisie-stat-lbl">Filles</div></div>
@@ -1500,6 +1503,32 @@ window.doDeverrouillerBepc = async function(id, centreId) {
   } catch(e) { alert(e.message); }
 };
 
+window.validerGroupeBepc = async function(centreId) {
+  if (!centreId) return;
+  const cands = (window._sbCands || []).filter(c => !c.valide);
+  if (!cands.length) { showToast('Aucune fiche à valider — tout est déjà validé.'); return; }
+
+  const notesMap = window._sbNotes || {};
+  let incompletes = 0;
+  cands.forEach(c => {
+    if (c.absent) return;
+    const res = calcMoyenneBepc(notesMap[c.id]||{}, c.inapt_eps, c.arts_plastiques);
+    if (res.moy === null) incompletes++;
+  });
+
+  let msg = `Valider ${cands.length} fiche(s) d'un coup ?\nElles seront toutes verrouillées.`;
+  if (incompletes) msg += `\n\n⚠️ Attention : ${incompletes} candidat(s) n'ont pas encore toutes leurs notes saisies.`;
+  if (!confirm(msg)) return;
+
+  try {
+    showToast('⏳ Validation en cours...');
+    await validerBepcBulk(cands.map(c=>c.id), G.user.id);
+    cands.forEach(c => { c.valide = true; });
+    await renderSaisieBepcList(centreId, window._sbCands||[]);
+    showToast(`✓ ${cands.length} fiche(s) validée(s) !`);
+  } catch(e) { alert('Erreur : ' + e.message); }
+};
+
 function updateResultBar(id, res, decision) {
   const bar = document.getElementById('res_'+id); if(!bar) return;
   const items = bar.querySelectorAll('.result-val');
@@ -1540,7 +1569,10 @@ async function renderSaisieBac() {
       </div>
     </div>
     <div id="sBStats" style="display:none" class="saisie-header">
-      <strong id="sBCentreNom"></strong>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+        <strong id="sBCentreNom"></strong>
+        <button class="btn btn-success btn-sm" onclick="validerGroupeBac(document.getElementById('sBCentre').value, document.getElementById('sBSerie').value)">✓✓ Valider groupé</button>
+      </div>
       <div class="saisie-stats">
         <div><div class="saisie-stat-val" id="sBTotal">0</div><div class="saisie-stat-lbl">Total</div></div>
         <div><div class="saisie-stat-val" id="sBTraites" style="color:var(--green)">0</div><div class="saisie-stat-lbl">Traités</div></div>
@@ -1701,6 +1733,32 @@ window.doDeverrouillerBac = async function(id, centreId, serie) {
     await renderSaisieBacList(centreId, serie, window._sBCands||[]);
     showToast('Fiche déverrouillée.');
   } catch(e){alert(e.message);}
+};
+
+window.validerGroupeBac = async function(centreId, serie) {
+  if (!centreId) return;
+  const cands = (window._sBCands || []).filter(c => !c.valide);
+  if (!cands.length) { showToast('Aucune fiche à valider — tout est déjà validé.'); return; }
+
+  const notesMap = window._sBNotes || {};
+  let incompletes = 0;
+  cands.forEach(c => {
+    if (c.absent) return;
+    const res = calcMoyenneBac(notesMap[c.id]||{}, c.serie, c.inapt_eps);
+    if (res.moy === null) incompletes++;
+  });
+
+  let msg = `Valider ${cands.length} fiche(s) d'un coup ?\nElles seront toutes verrouillées.`;
+  if (incompletes) msg += `\n\n⚠️ Attention : ${incompletes} candidat(s) n'ont pas encore toutes leurs notes saisies.`;
+  if (!confirm(msg)) return;
+
+  try {
+    showToast('⏳ Validation en cours...');
+    await validerBacBulk(cands.map(c=>c.id), G.user.id);
+    cands.forEach(c => { c.valide = true; });
+    await renderSaisieBacList(centreId, serie, window._sBCands||[]);
+    showToast(`✓ ${cands.length} fiche(s) validée(s) !`);
+  } catch(e) { alert('Erreur : ' + e.message); }
 };
 
 // ─────────────────────────────────────────────────────────────

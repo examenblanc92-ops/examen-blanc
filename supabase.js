@@ -136,6 +136,13 @@ export async function upsertCandidatsBepc(list) {
     .upsert(list, { onConflict:'matricule' }).select();
   if (error) throw error; return data;
 }
+export async function validerBepcBulk(ids, userId) {
+  if (!ids || !ids.length) return;
+  const { error } = await supabase.from('candidats_bepc')
+    .update({ valide:true, valide_par:userId, valide_at:new Date().toISOString() })
+    .in('id', ids);
+  if (error) throw error;
+}
 
 // ─── NOTES BEPC ──────────────────────────────────────────────
 export async function getNotesBepc(candidatId) {
@@ -217,6 +224,13 @@ export async function upsertCandidatsBac(list) {
   const { data, error } = await supabase.from('candidats_bac')
     .upsert(list, { onConflict:'matricule' }).select();
   if (error) throw error; return data;
+}
+export async function validerBacBulk(ids, userId) {
+  if (!ids || !ids.length) return;
+  const { error } = await supabase.from('candidats_bac')
+    .update({ valide:true, valide_par:userId, valide_at:new Date().toISOString() })
+    .in('id', ids);
+  if (error) throw error;
 }
 
 // ─── NOTES BAC ───────────────────────────────────────────────
