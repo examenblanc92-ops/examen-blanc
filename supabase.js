@@ -4,8 +4,8 @@
 
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 
-const SUPABASE_URL = 'https://ehnlvbdpwxyinjtxevxz.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_GHpoVxL-AOe8ccgneWjBlg_GjCjGUh8';
+const SUPABASE_URL = 'https://inxbpojevgsbfooplyeu.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlueGJwb2pldmdzYmZvb3BseWV1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4NzY1MDEsImV4cCI6MjA4OTQ1MjUwMX0.44gH4yZtBmWw7nKCtb54TmUftEinOAiK5Wk9bWhQUUY';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -72,6 +72,11 @@ export async function deleteEtab(id) {
   const { error } = await supabase.from('etablissements').delete().eq('id',id);
   if (error) throw error;
 }
+export async function upsertEtabs(list) {
+  const { data, error } = await supabase.from('etablissements')
+    .upsert(list, { onConflict:'id' }).select();
+  if (error) throw error; return data;
+}
 
 // ─── CENTRES ─────────────────────────────────────────────────
 export async function addCentre(c) {
@@ -85,6 +90,11 @@ export async function updateCentre(id, u) {
 export async function deleteCentre(id) {
   const { error } = await supabase.from('centres').delete().eq('id',id);
   if (error) throw error;
+}
+export async function upsertCentres(list) {
+  const { data, error } = await supabase.from('centres')
+    .upsert(list, { onConflict:'id' }).select();
+  if (error) throw error; return data;
 }
 
 // ─── CANDIDATS BEPC ──────────────────────────────────────────
