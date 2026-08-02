@@ -183,9 +183,13 @@ async function initApp() {
     }
 
   } else {
-    // OPÉRATEUR : masquer toutes les sections admin et directeur
-    ['adminSection','navResultats','navClassement','navDocuments',
-     'navDirecteurExtra','navCloture','navClotureInfo'].forEach(id => {
+    // SUPERVISEUR (opérateur / chef de centre) :
+    // Accès autorisé : consultation du Journal des modifications
+    // Accès bloqué : Résultats, Classement, Documents, section Directeur,
+    //                Utilisateurs, Import photos, Paramètres, clôture de session
+    ['navResultats','navClassement','navDocuments',
+     'navDirecteurExtra','navCloture','navClotureInfo',
+     'navUtilisateurs','navImportPhotos','navParametres'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = 'none';
     });
@@ -230,7 +234,7 @@ async function initApp() {
 // Pages réservées aux administrateurs uniquement
 const PAGES_ADMIN = ['bilan','statistiques','classement','releves','bilan-eleve',
                      'etablissements','centres','matieres','candidats',
-                     'journal','parametres','import-notes'];
+                     'parametres','import-notes'];
 
 window.nav = function(page) {
   // Page clôture : STRICTEMENT réservée au Directeur Régional
@@ -3463,7 +3467,7 @@ window.editProfile = async function(id) {
 // PARAMÈTRES
 // ─────────────────────────────────────────────────────────────
 async function renderParametres() {
-  if (G.role !== 'admin') return `<div class="alert alert-danger">Accès réservé à l'administrateur</div>`;
+  if (G.role !== 'admin' && G.role !== 'directeur') return `<div class="alert alert-danger">Accès réservé à l'administrateur et au Directeur Régional</div>`;
   const cfg = G.ref.config||{};
   return `
     <div class="page-header">
@@ -3489,10 +3493,10 @@ async function renderParametres() {
         <div class="card-title">Compte connecté</div>
         <div style="font-size:13px;margin-bottom:12px">
           <div>Email : <strong>${G.user?.email||'—'}</strong></div>
-          <div style="margin-top:4px">Rôle : <strong>🔑 Administrateur</strong></div>
+          <div style="margin-top:4px">Rôle : <strong>${G.role==='directeur'?'🔑 Directeur Régional':G.role==='admin'?'🛡 Administrateur':'👤 Superviseur'}</strong></div>
         </div>
         <div class="alert alert-success">
-          Accès complet à toutes les fonctionnalités.
+          ${G.role==='directeur'?'Accès complet à toutes les fonctionnalités, y compris la clôture de saison.':'Accès complet aux fonctionnalités administratives.'}
         </div>
       </div>
     </div>
@@ -3540,7 +3544,7 @@ async function renderParametres() {
 }
 
 window.demanderReinitialisation = function() {
-  if (G.role !== 'admin') { showToast('Accès refusé', 'error'); return; }
+  if (G.role !== 'admin' && G.role !== 'directeur') { showToast('Accès refusé', 'error'); return; }
   showModal('⚠️ Réinitialisation — Étape 1/2', `
     <div class="alert alert-danger" style="margin-bottom:16px">
       Vous êtes sur le point de supprimer <strong>tous les candidats, toutes les notes,
@@ -3812,7 +3816,8 @@ window.modifierNoteAdmin = async function(candidatId, matiereId, noteActuelle, t
 };
 
 window.renderJournal = async function() {
-  if(G.role!=='admin') return `<div class="alert alert-danger">Accès réservé à l'administrateur</div>`;
+  // Consultation ouverte à tous les rôles (Admin, Directeur Régional, Superviseur) — seuls
+  // Admin et Directeur peuvent modifier des notes, donc seules leurs actions y apparaîtront.
 
   // Arrêter l'ancienne subscription si elle existe
   if (window._journalChannel) {
