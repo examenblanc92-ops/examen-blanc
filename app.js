@@ -15,7 +15,7 @@ import {
   deleteCandidatBac, validerBac, deverrouillerBac, validerBacBulk,
   upsertCandidatsBac, getNotesBac, upsertNoteBac, importNotesBac,
   uploadPhoto, getProfiles, updateProfile
-} from './supabase.js?v=20260802e';
+} from './supabase.js?v=20260802f';
 
 // ─── ÉTAT GLOBAL ─────────────────────────────────────────────
 let G = {
@@ -167,12 +167,14 @@ async function initApp() {
     }
 
   } else if (G.role === 'admin') {
-    // ADMIN : voit tout SAUF la section Directeur Régional
+    // ADMIN : voit tout SAUF la section Directeur Régional ET SAUF Paramètres (Directeur uniquement)
     // Supprimer IMMÉDIATEMENT toute trace de section directeur
     ['navDirecteurExtra','navCloture','navClotureInfo'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.remove();
     });
+    const navParams = document.getElementById('navParametres');
+    if (navParams) navParams.style.display = 'none';
     // Juste un indicateur statut saison non cliquable
     const adminSec = document.getElementById('adminSection');
     if (adminSec) {
@@ -233,8 +235,7 @@ async function initApp() {
 // ─── NAVIGATION ──────────────────────────────────────────────
 // Pages réservées aux administrateurs uniquement
 const PAGES_ADMIN = ['bilan','statistiques','classement','releves','bilan-eleve',
-                     'etablissements','centres','matieres','candidats',
-                     'parametres','import-notes'];
+                     'etablissements','centres','matieres','candidats','import-notes'];
 
 window.nav = function(page) {
   // Page clôture : STRICTEMENT réservée au Directeur Régional
@@ -249,7 +250,7 @@ window.nav = function(page) {
   }
   // Pages directeur uniquement (admin et opérateur bloqués)
   const PAGES_DIRECTEUR = ['notifications','connectes','inspecteur','sauvegarde',
-                           'alertes-fraude','journal-cnx','rapport-session','utilisateurs'];
+                           'alertes-fraude','journal-cnx','rapport-session','utilisateurs','parametres'];
   if (PAGES_DIRECTEUR.includes(page) && G.role !== 'directeur') {
     document.getElementById('content').innerHTML = `
       <div class="card" style="text-align:center;padding:48px">
@@ -3467,7 +3468,7 @@ window.editProfile = async function(id) {
 // PARAMÈTRES
 // ─────────────────────────────────────────────────────────────
 async function renderParametres() {
-  if (G.role !== 'admin' && G.role !== 'directeur') return `<div class="alert alert-danger">Accès réservé à l'administrateur et au Directeur Régional</div>`;
+  if (G.role !== 'directeur') return `<div class="alert alert-danger">Accès réservé au Directeur Régional</div>`;
   const cfg = G.ref.config||{};
   return `
     <div class="page-header">
@@ -3544,7 +3545,7 @@ async function renderParametres() {
 }
 
 window.demanderReinitialisation = function() {
-  if (G.role !== 'admin' && G.role !== 'directeur') { showToast('Accès refusé', 'error'); return; }
+  if (G.role !== 'directeur') { showToast('Accès refusé', 'error'); return; }
   showModal('⚠️ Réinitialisation — Étape 1/2', `
     <div class="alert alert-danger" style="margin-bottom:16px">
       Vous êtes sur le point de supprimer <strong>tous les candidats, toutes les notes,
