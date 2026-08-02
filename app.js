@@ -15,7 +15,7 @@ import {
   deleteCandidatBac, validerBac, deverrouillerBac, validerBacBulk,
   upsertCandidatsBac, getNotesBac, upsertNoteBac, importNotesBac,
   uploadPhoto, getProfiles, updateProfile
-} from './supabase.js';
+} from './supabase.js?v=20260802e';
 
 // ─── ÉTAT GLOBAL ─────────────────────────────────────────────
 let G = {
