@@ -1463,7 +1463,7 @@ window.saisirNoteBepc = async function(candidatId, matiereId, value) {
       if (note !== null) {
         const noteAvant = window._sbNotesAvant?.[candidatId]?.[matiereId] ?? null;
         await upsertNoteBepc(candidatId, matiereId, note, G.user.id);
-        await logModification('bepc', candidatId, matiereId, noteAvant, note, '');
+        await logModification('bepc', candidatId, matiereId, noteAvant, note, '', cand);
         if (!window._sbNotesAvant) window._sbNotesAvant = {};
         if (!window._sbNotesAvant[candidatId]) window._sbNotesAvant[candidatId] = {};
         window._sbNotesAvant[candidatId][matiereId] = note;
@@ -1694,7 +1694,7 @@ window.saisirNoteBac = async function(candidatId, matiereId, value) {
       if(note!==null) {
         const noteAvant = window._sBNotesAvant?.[candidatId]?.[matiereId] ?? null;
         await upsertNoteBac(candidatId, matiereId, note, G.user.id);
-        await logModification('bac', candidatId, matiereId, noteAvant, note, '');
+        await logModification('bac', candidatId, matiereId, noteAvant, note, '', cand);
         if (!window._sBNotesAvant) window._sBNotesAvant = {};
         if (!window._sBNotesAvant[candidatId]) window._sBNotesAvant[candidatId] = {};
         window._sBNotesAvant[candidatId][matiereId] = note;
@@ -3696,9 +3696,10 @@ document.addEventListener('click', e => {
 // TRAÇABILITÉ DES MODIFICATIONS — ADMIN UNIQUEMENT
 // ─────────────────────────────────────────────────────────────
 
-async function logModification(typeExamen, candidatId, matiereId, noteAvant, noteApres, motif) {
+async function logModification(typeExamen, candidatId, matiereId, noteAvant, noteApres, motif, candidatSnapshot) {
   try {
     const nomAdmin = G.user?.profile?.nom || G.user?.email || 'Admin';
+    const c = candidatSnapshot || {};
     await supabase.from('audit_modifications').insert({
       type_examen:     typeExamen,
       candidat_id:     candidatId,
@@ -3708,7 +3709,13 @@ async function logModification(typeExamen, candidatId, matiereId, noteAvant, not
       modifie_par:     G.user.id,
       modifie_par_nom: nomAdmin,
       motif:           motif || '',
-      modifie_at:      new Date().toISOString()
+      modifie_at:      new Date().toISOString(),
+      // Instantané figé du candidat (reste intact même si le candidat est supprimé plus tard)
+      candidat_nom:       c.nom || null,
+      candidat_prenoms:   c.prenoms || null,
+      candidat_matricule: c.matricule || null,
+      candidat_num_table: c.num_table || null,
+      centre_nom:         c.centre_id ? getCentreNom(c.centre_id) : (c.centre_nom || null),
     });
   } catch(e) { console.error('Erreur log:', e); }
 }
@@ -3768,7 +3775,10 @@ window.modifierNoteAdmin = async function(candidatId, matiereId, noteActuelle, t
          const payload={candidat_id:candidatId,matiere_id:matiereId,note:n,saisie_par:G.user.id,modifie_par_nom:nomAdmin,modifie_at:new Date().toISOString(),updated_at:new Date().toISOString()};
          if(type==='bepc') await supabase.from('notes_bepc').upsert(payload,{onConflict:'candidat_id,matiere_id'});
          else await supabase.from('notes_bac').upsert(payload,{onConflict:'candidat_id,matiere_id'});
-         await logModification(type,candidatId,matiereId,noteActuelle,n,m);
+         const candSnap = type==='bepc'
+           ? (window._sbCands||[]).find(c=>c.id===candidatId)
+           : (window._sBCands||[]).find(c=>c.id===candidatId);
+         await logModification(type,candidatId,matiereId,noteActuelle,n,m,candSnap);
          closeModal();
          showToast(`✓ Note modifiée par ${nomAdmin} — journalisée`);
          if(type==='bepc') await loadSaisieBepc();
@@ -3802,8 +3812,10 @@ window.renderJournal = async function() {
     if (!data?.length) { tbody.innerHTML='<tr><td colspan="9" style="text-align:center;color:var(--text2)">Aucune modification enregistrée.</td></tr>'; return; }
 
     // Récupération des infos candidat (nom, matricule, n°table, centre) pour traçabilité
-    const idsBepc = [...new Set(data.filter(l=>l.type_examen==='bepc').map(l=>l.candidat_id))];
-    const idsBac  = [...new Set(data.filter(l=>l.type_examen==='bac').map(l=>l.candidat_id))];
+    // — uniquement nécessaire pour les entrées anciennes n'ayant pas encore l'instantané figé
+    const sansSnapshot = data.filter(l => !l.candidat_matricule);
+    const idsBepc = [...new Set(sansSnapshot.filter(l=>l.type_examen==='bepc').map(l=>l.candidat_id))];
+    const idsBac  = [...new Set(sansSnapshot.filter(l=>l.type_examen==='bac').map(l=>l.candidat_id))];
     const candMap = {};
     const [rBepc, rBac] = await Promise.all([
       idsBepc.length ? supabase.from('candidats_bepc').select('id,nom,prenoms,matricule,num_table,centre_id').in('id', idsBepc) : Promise.resolve({data:[]}),
@@ -3817,11 +3829,16 @@ window.renderJournal = async function() {
       const dateStr = dt.toLocaleDateString('fr-FR');
       const heureStr = dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
       const isNew = (Date.now()-dt.getTime()) < 30000;
+
+      // Priorité à l'instantané figé au moment de la modification (immuable) ;
+      // repli sur la jointure live pour les entrées antérieures à cette fonctionnalité
       const c = candMap[log.candidat_id];
-      const candStr     = c ? `${c.nom} ${c.prenoms||''}` : '<span style="color:var(--text3)">Candidat introuvable</span>';
-      const matriculeStr = c ? c.matricule : '—';
-      const numTableStr  = c ? c.num_table : '—';
-      const centreStr    = c ? getCentreNom(c.centre_id) : '—';
+      const candStr = log.candidat_matricule
+        ? `${log.candidat_nom||''} ${log.candidat_prenoms||''}`
+        : (c ? `${c.nom} ${c.prenoms||''}` : '<span style="color:var(--text3)">Candidat introuvable</span>');
+      const matriculeStr = log.candidat_matricule || (c ? c.matricule : '—');
+      const numTableStr   = log.candidat_num_table || (c ? c.num_table : '—');
+      const centreStr     = log.centre_nom || (c ? getCentreNom(c.centre_id) : '—');
       return `<tr${isNew?' style="background:var(--green-light,#e8f5e9);animation:fadeIn .5s"':''}>
         <td class="td-mono" style="font-size:11px;white-space:nowrap">
           <div>${dateStr}</div>
