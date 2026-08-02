@@ -1709,100 +1709,197 @@ window.doDeverrouillerBac = async function(id, centreId, serie) {
 async function renderImportNotes() {
   return `
     <div class="page-header">
-      <div><div class="page-title">Import des notes (Excel/CSV)</div></div>
+      <div><div class="page-title">Import des notes (Excel)</div></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
       <div class="card">
         <div class="card-title">Notes BEPC</div>
-        <div class="alert alert-info" style="font-size:12px">CSV : matricule, matiere_id, note</div>
+        <div class="alert alert-info" style="font-size:12px">
+          📌 Téléchargez le modèle Excel (une ligne par candidat, une colonne par matière), remplissez les notes, puis réimportez-le.
+        </div>
         <div class="import-zone" style="margin-top:10px" onclick="document.getElementById('impNB').click()">
           <div class="import-icon">📊</div><div class="import-title">Importer notes BEPC</div>
+          <div class="import-sub">Fichier Excel (.xlsx ou .xls)</div>
         </div>
-        <input type="file" id="impNB" accept=".csv" style="display:none" onchange="processImportNotes(this,'bepc')"/>
-        <button class="btn btn-outline btn-sm" style="margin-top:10px" onclick="dlModeleNotes('bepc')">⬇ Modèle CSV</button>
+        <input type="file" id="impNB" accept=".xlsx,.xls" style="display:none" onchange="processImportNotes(this,'bepc')"/>
+        <div id="impNBPreview" style="margin-top:10px"></div>
+        <button class="btn btn-outline btn-sm" style="margin-top:10px" onclick="downloadModeleNotes('bepc')">⬇ Modèle Excel</button>
       </div>
       <div class="card">
         <div class="card-title">Notes BAC</div>
-        <div class="alert alert-info" style="font-size:12px">CSV : matricule, matiere_id, note</div>
+        <div class="alert alert-info" style="font-size:12px">
+          📌 Le modèle contient un onglet par série (une ligne par candidat, une colonne par matière).
+        </div>
         <div class="import-zone" style="margin-top:10px" onclick="document.getElementById('impNBAC').click()">
           <div class="import-icon">📊</div><div class="import-title">Importer notes BAC</div>
+          <div class="import-sub">Fichier Excel (.xlsx ou .xls)</div>
         </div>
-        <input type="file" id="impNBAC" accept=".csv" style="display:none" onchange="processImportNotes(this,'bac')"/>
-        <button class="btn btn-outline btn-sm" style="margin-top:10px" onclick="dlModeleNotes('bac')">⬇ Modèle CSV</button>
+        <input type="file" id="impNBAC" accept=".xlsx,.xls" style="display:none" onchange="processImportNotes(this,'bac')"/>
+        <div id="impNBACPreview" style="margin-top:10px"></div>
+        <button class="btn btn-outline btn-sm" style="margin-top:10px" onclick="downloadModeleNotes('bac')">⬇ Modèle Excel</button>
       </div>
     </div>`;
 }
 
+// ─── Modèle Excel (une ligne par candidat, une colonne par matière) ──
+window.downloadModeleNotes = async function(type) {
+  await loadSheetJS();
+  try {
+    const wb = XLSX.utils.book_new();
+
+    if (type === 'bepc') {
+      const mats  = G.ref.matBepc || [];
+      const cands = await getCandidatsBepc();
+      const headers = ['matricule','nom','prenoms', ...mats.map(m=>m.id)];
+      const rows = cands.length
+        ? cands.map(c => [c.matricule, c.nom||'', c.prenoms||'', ...mats.map(()=>'')])
+        : [['VOTRE_MATRICULE','NOM','Prénoms', ...mats.map(()=>'')]];
+      const wsData = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      wsData['!cols'] = headers.map(h => ({ wch: Math.max(String(h).length + 4, 10) }));
+      XLSX.utils.book_append_sheet(wb, wsData, 'Notes BEPC');
+
+      const wsRef = XLSX.utils.aoa_to_sheet([
+        ['Code (colonne)', 'Matière', 'Facultative'],
+        ...mats.map(m => [m.id, m.nom, m.facultatif ? 'Oui' : 'Non'])
+      ]);
+      wsRef['!cols'] = [{ wch:14 },{ wch:32 },{ wch:14 }];
+      XLSX.utils.book_append_sheet(wb, wsRef, 'Matières (ref)');
+
+    } else {
+      const matBac    = G.ref.matBac || {};
+      const allCands  = await getCandidatsBac();
+      const series    = Object.keys(matBac);
+      let sheetsAdded = 0;
+
+      series.forEach(serie => {
+        const mats  = matBac[serie] || [];
+        const cands = allCands.filter(c => c.serie === serie);
+        if (!mats.length) return;
+        const headers = ['matricule','nom','prenoms', ...mats.map(m=>m.id)];
+        const rows = cands.length
+          ? cands.map(c => [c.matricule, c.nom||'', c.prenoms||'', ...mats.map(()=>'')])
+          : [['VOTRE_MATRICULE','NOM','Prénoms', ...mats.map(()=>'')]];
+        const wsData = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+        wsData['!cols'] = headers.map(h => ({ wch: Math.max(String(h).length + 4, 10) }));
+        const safeName = ('Notes ' + serie).replace(/[\\/?*[\]:]/g,'').slice(0,31);
+        XLSX.utils.book_append_sheet(wb, wsData, safeName);
+        sheetsAdded++;
+      });
+
+      if (!sheetsAdded) {
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['matricule','nom','prenoms']]), 'Notes BAC');
+      }
+
+      const refRows = [['Série','Code (colonne)','Matière']];
+      series.forEach(s => (matBac[s]||[]).forEach(m => refRows.push([s, m.id, m.nom])));
+      const wsRef = XLSX.utils.aoa_to_sheet(refRows);
+      wsRef['!cols'] = [{ wch:10 },{ wch:14 },{ wch:32 }];
+      XLSX.utils.book_append_sheet(wb, wsRef, 'Matières (ref)');
+    }
+
+    XLSX.writeFile(wb, `modele_notes_${type}.xlsx`);
+    showToast('Modèle Excel téléchargé !');
+  } catch(e) {
+    alert('Erreur génération du modèle : ' + e.message);
+  }
+};
+
+// ─── Import du fichier Excel rempli ──────────────────────────
 window.processImportNotes = async function(input, type) {
   if (G.saison === 'cloturee') {
     alert('🔴 Saison clôturée — import impossible. Contactez le Directeur Régional.');
     return;
   }
-  const file = input.files[0]; if(!file) return;
-  const text = await file.text();
-  const lines = text.split('\n').filter(l=>l.trim());
+  const file = input.files[0]; if (!file) return;
+  const previewId = type === 'bepc' ? 'impNBPreview' : 'impNBACPreview';
+  const preview = document.getElementById(previewId);
+  if (preview) preview.innerHTML = '<div style="font-size:12px;color:var(--text2)">⏳ Lecture du fichier...</div>';
 
-  // Détection automatique séparateur ; ou ,
-  const sep = lines[0].includes(';') ? ';' : ',';
-  const headers = lines[0].split(sep).map(h=>h.trim().toLowerCase().replace(/['"]/g,''));
-
-  const rows = [];
-  const allCands = type==='bepc'
-    ? await getCandidatsBepc()
-    : await getCandidatsBac();
-  const matMap = {};
-  allCands.forEach(c => { matMap[c.matricule.toUpperCase()] = c.id; });
-
-  let ignores = 0;
-  for (let i=1; i<lines.length; i++) {
-    const vals = lines[i].split(sep).map(v=>v.trim().replace(/^"|"$/g,''));
-    const obj  = {};
-    headers.forEach((h,idx) => { obj[h] = vals[idx]||''; });
-    const candidatId = matMap[obj.matricule?.toUpperCase()];
-    if (!candidatId || !obj.matiere_id) { ignores++; continue; }
-    const note = parseFloat(obj.note);
-    if (isNaN(note)) { ignores++; continue; }
-    rows.push({ candidat_id:candidatId, matiere_id:obj.matiere_id.trim(), note });
-  }
-  if (!rows.length) {
-    alert(`Aucune note valide trouvée.\n${ignores} ligne(s) ignorée(s).\nVérifiez que les matricules correspondent et que le séparateur est ; ou ,`);
+  try {
+    await loadSheetJS();
+  } catch(e) {
+    if (preview) preview.innerHTML = `<div class="alert alert-danger">Erreur chargement moteur Excel : ${e.message}</div>`;
     return;
   }
-  try {
-    if (type==='bepc') await importNotesBepc(rows);
-    else               await importNotesBac(rows);
-    showToast(`✅ ${rows.length} note(s) importée(s) !${ignores?' ('+ignores+' ignorée(s))':''}`);
-  } catch(e){ alert('Erreur : '+e.message); }
-};
 
-window.dlModeleNotes = function(type) {
-  let csv;
-  if (type === 'bepc') {
-    // Modèle BEPC avec les vrais IDs
-    const mats = G.ref.matBepc || [];
-    const lignes = ['matricule;matiere_id;matiere_nom;note'];
-    // Exemple avec 2 matricules fictifs
-    ['VOTRE_MATRICULE_1','VOTRE_MATRICULE_2'].forEach(mat => {
-      mats.forEach(m => {
-        if (!m.facultatif) lignes.push(`${mat};${m.id};${m.nom};`);
+  const fileName = file.name.toLowerCase();
+  const isXls = fileName.endsWith('.xls') && !fileName.endsWith('.xlsx');
+
+  const reader = new FileReader();
+  reader.onload = async function(ev) {
+    try {
+      let wb;
+      if (isXls) {
+        wb = XLSX.read(ev.target.result, { type: 'binary', cellDates: true });
+      } else {
+        const data = new Uint8Array(ev.target.result);
+        wb = XLSX.read(data, { type: 'array', cellDates: true });
+      }
+
+      // Ensemble des codes matière valides selon le type
+      const matiereIds = new Set();
+      if (type === 'bepc') {
+        (G.ref.matBepc || []).forEach(m => matiereIds.add(m.id));
+      } else {
+        Object.values(G.ref.matBac || {}).forEach(list => list.forEach(m => matiereIds.add(m.id)));
+      }
+
+      const allCands = type === 'bepc' ? await getCandidatsBepc() : await getCandidatsBac();
+      const matMap = {};
+      allCands.forEach(c => { matMap[c.matricule.toUpperCase()] = c.id; });
+
+      const rows = [];
+      let ignoresLignes = 0, ignoresCellules = 0;
+
+      wb.SheetNames.forEach(sheetName => {
+        if (/r[ée]f/i.test(sheetName)) return; // on saute la feuille "(ref)"
+        const ws = wb.Sheets[sheetName];
+        const jsonRows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+        jsonRows.forEach(obj => {
+          const norm = {};
+          Object.keys(obj).forEach(k => { norm[k.trim()] = obj[k]; });
+          const matriculeKey = Object.keys(norm).find(k => k.toLowerCase() === 'matricule');
+          const matricule = matriculeKey ? String(norm[matriculeKey]).trim().toUpperCase() : '';
+          const candidatId = matMap[matricule];
+          if (!candidatId) { if (matricule) ignoresLignes++; return; }
+
+          Object.keys(norm).forEach(col => {
+            if (!matiereIds.has(col)) return; // colonnes non-matière (nom, prénoms…) ignorées
+            const raw = norm[col];
+            if (raw === '' || raw === null || raw === undefined) return; // case vide = rien à importer
+            const note = parseFloat(String(raw).trim().replace(',', '.'));
+            if (isNaN(note)) { ignoresCellules++; return; }
+            rows.push({ candidat_id: candidatId, matiere_id: col, note });
+          });
+        });
       });
-    });
-    csv = lignes.join('\n');
-  } else {
-    // Modèle BAC — toutes séries
-    const allMats = G.ref.matBac || {};
-    const lignes = ['matricule;serie;matiere_id;matiere_nom;note'];
-    Object.entries(allMats).forEach(([serie, mats]) => {
-      mats.forEach(m => {
-        lignes.push(`VOTRE_MATRICULE;${serie};${m.id};${m.nom};`);
-      });
-    });
-    csv = lignes.join('\n');
-  }
-  const a = document.createElement('a');
-  a.href = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURIComponent(csv);
-  a.download = `modele_notes_${type}.csv`;
-  a.click();
+
+      if (!rows.length) {
+        if (preview) preview.innerHTML = `<div class="alert alert-danger">
+          Aucune note valide trouvée.
+          ${ignoresLignes ? `<br>${ignoresLignes} ligne(s) avec un matricule non reconnu.` : ''}
+          ${ignoresCellules ? `<br>${ignoresCellules} cellule(s) illisible(s).` : ''}
+          <br>Vérifiez que les matricules correspondent bien à des candidats déjà enregistrés.
+        </div>`;
+        return;
+      }
+
+      if (type === 'bepc') await importNotesBepc(rows);
+      else                 await importNotesBac(rows);
+
+      const msg = `✓ ${rows.length} note(s) importée(s) avec succès !`
+        + (ignoresLignes   ? ` (${ignoresLignes} ligne(s) ignorée(s) — matricule non reconnu)` : '')
+        + (ignoresCellules ? ` (${ignoresCellules} cellule(s) ignorée(s) — valeur invalide)`   : '');
+      if (preview) preview.innerHTML = `<div class="alert alert-info" style="font-size:12px">${msg}</div>`;
+      showToast(`✓ ${rows.length} note(s) importée(s) !`);
+
+    } catch(e) {
+      if (preview) preview.innerHTML = `<div class="alert alert-danger">❌ Erreur lecture Excel : ${e.message}</div>`;
+    }
+  };
+  if (isXls) reader.readAsBinaryString(file);
+  else       reader.readAsArrayBuffer(file);
 };
 
 // ─────────────────────────────────────────────────────────────
