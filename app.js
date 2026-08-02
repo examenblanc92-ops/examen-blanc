@@ -3798,13 +3798,30 @@ window.renderJournal = async function() {
       .limit(200);
     const tbody = document.getElementById('journalTbody');
     if (!tbody) return;
-    if (error) { tbody.innerHTML=`<tr><td colspan="7" class="alert alert-danger">${error.message}</td></tr>`; return; }
-    if (!data?.length) { tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--text2)">Aucune modification enregistrée.</td></tr>'; return; }
+    if (error) { tbody.innerHTML=`<tr><td colspan="9" class="alert alert-danger">${error.message}</td></tr>`; return; }
+    if (!data?.length) { tbody.innerHTML='<tr><td colspan="9" style="text-align:center;color:var(--text2)">Aucune modification enregistrée.</td></tr>'; return; }
+
+    // Récupération des infos candidat (nom, matricule, n°table, centre) pour traçabilité
+    const idsBepc = [...new Set(data.filter(l=>l.type_examen==='bepc').map(l=>l.candidat_id))];
+    const idsBac  = [...new Set(data.filter(l=>l.type_examen==='bac').map(l=>l.candidat_id))];
+    const candMap = {};
+    const [rBepc, rBac] = await Promise.all([
+      idsBepc.length ? supabase.from('candidats_bepc').select('id,nom,prenoms,matricule,num_table,centre_id').in('id', idsBepc) : Promise.resolve({data:[]}),
+      idsBac.length  ? supabase.from('candidats_bac').select('id,nom,prenoms,matricule,num_table,centre_id').in('id', idsBac)  : Promise.resolve({data:[]}),
+    ]);
+    (rBepc.data||[]).forEach(c => { candMap[c.id] = c; });
+    (rBac.data||[]).forEach(c => { candMap[c.id] = c; });
+
     tbody.innerHTML = data.map(log=>{
       const dt = new Date(log.modifie_at);
       const dateStr = dt.toLocaleDateString('fr-FR');
       const heureStr = dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
       const isNew = (Date.now()-dt.getTime()) < 30000;
+      const c = candMap[log.candidat_id];
+      const candStr     = c ? `${c.nom} ${c.prenoms||''}` : '<span style="color:var(--text3)">Candidat introuvable</span>';
+      const matriculeStr = c ? c.matricule : '—';
+      const numTableStr  = c ? c.num_table : '—';
+      const centreStr    = c ? getCentreNom(c.centre_id) : '—';
       return `<tr${isNew?' style="background:var(--green-light,#e8f5e9);animation:fadeIn .5s"':''}>
         <td class="td-mono" style="font-size:11px;white-space:nowrap">
           <div>${dateStr}</div>
@@ -3812,6 +3829,11 @@ window.renderJournal = async function() {
         </td>
         <td><span class="badge badge-red">${log.modifie_par_nom}</span></td>
         <td>${badge((log.type_examen||'?').toUpperCase(),'blue')}</td>
+        <td style="font-size:12px;white-space:nowrap">
+          <div style="font-weight:600">${candStr}</div>
+          <div style="color:var(--text2);font-size:11px">${matriculeStr} · N°${numTableStr}</div>
+        </td>
+        <td style="font-size:12px">${centreStr}</td>
         <td class="td-mono">${log.matiere_id}</td>
         <td class="td-mono" style="color:var(--red)">${log.note_avant??'—'}</td>
         <td class="td-mono" style="color:var(--green);font-weight:600">${log.note_apres}</td>
@@ -3862,13 +3884,15 @@ window.renderJournal = async function() {
         <th>Date & Heure</th>
         <th>Utilisateur</th>
         <th>Type</th>
+        <th>Candidat</th>
+        <th>Centre</th>
         <th>Matière</th>
         <th>Avant</th>
         <th>Après</th>
         <th>Motif</th>
       </tr></thead>
       <tbody id="journalTbody">
-        <tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text2)">Chargement...</td></tr>
+        <tr><td colspan="9" style="text-align:center;padding:20px;color:var(--text2)">Chargement...</td></tr>
       </tbody>
     </table></div>`;
 };
