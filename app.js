@@ -1380,6 +1380,18 @@ async function renderSaisieBepcList(centreId, cands) {
   }));
   window._sbNotes = notesMap;
 
+  // Mémoriser les valeurs actuelles comme référence "avant" pour la traçabilité,
+  // sans écraser une valeur déjà suivie pendant la session en cours
+  if (!window._sbNotesAvant) window._sbNotesAvant = {};
+  Object.keys(notesMap).forEach(candId => {
+    if (!window._sbNotesAvant[candId]) window._sbNotesAvant[candId] = {};
+    Object.keys(notesMap[candId]).forEach(matId => {
+      if (window._sbNotesAvant[candId][matId] === undefined) {
+        window._sbNotesAvant[candId][matId] = notesMap[candId][matId];
+      }
+    });
+  });
+
   document.getElementById('sbList').innerHTML = cands.map(c => {
     const notes    = notesMap[c.id] || {};
     const isAdmin  = G.role === 'admin';
@@ -1616,6 +1628,18 @@ async function renderSaisieBacList(centreId, serie, cands) {
   const notesMap = {};
   await Promise.all(cands.map(async c => { notesMap[c.id] = await getNotesBac(c.id); }));
   window._sBNotes = notesMap;
+
+  // Mémoriser les valeurs actuelles comme référence "avant" pour la traçabilité,
+  // sans écraser une valeur déjà suivie pendant la session en cours
+  if (!window._sBNotesAvant) window._sBNotesAvant = {};
+  Object.keys(notesMap).forEach(candId => {
+    if (!window._sBNotesAvant[candId]) window._sBNotesAvant[candId] = {};
+    Object.keys(notesMap[candId]).forEach(matId => {
+      if (window._sBNotesAvant[candId][matId] === undefined) {
+        window._sBNotesAvant[candId][matId] = notesMap[candId][matId];
+      }
+    });
+  });
 
   document.getElementById('sBList').innerHTML = cands.map(c => {
     const mats     = (G.ref.matBac||{})[c.serie] || [];
